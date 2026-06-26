@@ -58,6 +58,12 @@ const commands = [
         .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .toJSON(),
+
+  new SlashCommandBuilder()
+    .setName('ping')
+    .setDescription('Ping les membres du rôle configuré qui n\'ont pas réagi au dernier appel de présence')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .toJSON(),
 ];
 
 async function registerCommands(guildId) {
@@ -135,8 +141,73 @@ client.on('interactionCreate', async (interaction) => {
       return interaction.reply({ content: '❌ Salon introuvable. Refais `/config_presence`.', ephemeral: true });
     }
 
-    await sendPresenceMessage(targetChannel, message, date, heure, roleId);
+    const sentMsg = await sendPresenceMessage(targetChannel, message, date, heure, roleId);
+    config[guildId].lastPresenceMsgId = sentMsg.id;
+    config[guildId].lastPresenceChannelId = targetChannel.id;
+    saveConfig(config);
     await interaction.reply({ content: `✅ Appel de présence envoyé dans ${targetChannel} !`, ephemeral: true });
+  }
+
+  else if (interaction.commandName === 'ping') {
+    const serverConfig = config[guildId];
+    const roleId = serverConfig?.roleId;
+    const lastMsgId = serverConfig?.lastPresenceMsgId;
+    const lastChannelId = serverConfig?.lastPresenceChannelId ?? serverConfig?.channelId;
+
+    if (!roleId) {
+      return interaction.reply({ content: '❌ Aucun rôle configuré. Utilise `/config_presence` d\'abord.', ephemeral: true });
+    }
+    if (!lastMsgId) {
+      return interaction.reply({ content: '❌ Aucun appel de présence trouvé. Envoie d\'abord un `/presence`.', ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const channel = interaction.guild.channels.cache.get(lastChannelId);
+    if (!channel) {
+      return interaction.editReply({ content: '❌ Salon introuvable.' });
+    }
+
+    let presenceMsg;
+    try {
+      presenceMsg = await channel.messages.fetch(lastMsgId);
+    } catch {
+      return interaction.editReply({ content: '❌ Message de présence introuvable (supprimé ?).' });
+    }
+
+    // Récupérer tous les membres du rôle
+    const role = interaction.guild.roles.cache.get(roleId);
+    if (!role) {
+      return interaction.editReply({ content: '❌ Rôle introuvable.' });
+    }
+    await interaction.guild.members.fetch();
+    const roleMembers = role.members;
+
+    // Récupérer les réactions ✅ et ⏳
+    const reactions = presenceMsg.reactions.cache;
+    const presentReaction = reactions.get('✅');
+    const retardReaction = reactions.get('⏳');
+
+    const reactedUsers = new Set();
+    if (presentReaction) {
+      const users = await presentReaction.users.fetch();
+      users.forEach(u => reactedUsers.add(u.id));
+    }
+    if (retardReaction) {
+      const users = await retardReaction.users.fetch();
+      users.forEach(u => reactedUsers.add(u.id));
+    }
+
+    // Membres du rôle qui n'ont pas réagi
+    const absents = roleMembers.filter(m => !reactedUsers.has(m.id) && !m.user.bot);
+
+    if (absents.size === 0) {
+      return interaction.editReply({ content: '✅ Tout le monde a répondu à l\'appel de présence !' });
+    }
+
+    const mentions = absents.map(m => `<@${m.id}>`).join(' ');
+    await channel.send({ content: `⚠️ **Rappel de présence** — Les membres suivants n'ont pas encore répondu :\n${mentions}` });
+    await interaction.editReply({ content: `✅ ${absents.size} membre(s) relancé(s) dans ${channel}.` });
   }
 });
 
@@ -155,7 +226,10 @@ client.on('messageCreate', async (message) => {
 
   const [msg, date, heure] = parts.map(p => p.trim());
   const roleId = serverConfig?.roleId ?? null;
-  await sendPresenceMessage(message.channel, msg, date, heure, roleId);
+  const sentMsg = await sendPresenceMessage(message.channel, msg, date, heure, roleId);
+  serverConfig.lastPresenceMsgId = sentMsg.id;
+  serverConfig.lastPresenceChannelId = message.channel.id;
+  saveConfig(config);
   await message.delete().catch(() => {});
 });
 
