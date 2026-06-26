@@ -178,8 +178,13 @@ client.on('interactionCreate', async (interaction) => {
       return interaction.editReply({ content: '❌ Rôle introuvable.' });
     }
 
-    const roleMembers = await interaction.guild.members.fetch({ force: false });
-    const membersWithRole = roleMembers.filter(m => m.roles.cache.has(roleId) && !m.user.bot);
+    let membersWithRole;
+    try {
+      const roleMembers = await interaction.guild.members.fetch({ force: false });
+      membersWithRole = roleMembers.filter(m => m.roles.cache.has(roleId) && !m.user.bot);
+    } catch {
+      membersWithRole = interaction.guild.members.cache.filter(m => m.roles.cache.has(roleId) && !m.user.bot);
+    }
 
     const reactedUsers = new Set();
     for (const emoji of ['✅', '⏳']) {
