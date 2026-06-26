@@ -173,11 +173,13 @@ client.on('interactionCreate', async (interaction) => {
       return interaction.editReply({ content: '❌ Message introuvable. Vérifie l\'ID.' });
     }
 
-    await interaction.guild.members.fetch();
-    const role = interaction.guild.roles.cache.get(roleId);
+    const role = await interaction.guild.roles.fetch(roleId);
     if (!role) {
       return interaction.editReply({ content: '❌ Rôle introuvable.' });
     }
+
+    const roleMembers = await interaction.guild.members.fetch({ force: false });
+    const membersWithRole = roleMembers.filter(m => m.roles.cache.has(roleId) && !m.user.bot);
 
     const reactedUsers = new Set();
     for (const emoji of ['✅', '⏳']) {
@@ -188,7 +190,7 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
-    const absents = role.members.filter(m => !reactedUsers.has(m.id) && !m.user.bot);
+    const absents = membersWithRole.filter(m => !reactedUsers.has(m.id));
 
     if (absents.size === 0) {
       return interaction.editReply({ content: '✅ Tout le monde a répondu !' });
