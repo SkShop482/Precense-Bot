@@ -150,16 +150,16 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   else if (interaction.commandName === 'ping') {
+    await interaction.deferReply({ ephemeral: true });
+
     const msgId = interaction.options.getString('message_id');
     const serverConfig = config[guildId];
     const roleId = serverConfig?.roleId;
     const channelId = serverConfig?.channelId;
 
     if (!roleId) {
-      return interaction.reply({ content: '❌ Aucun rôle configuré. Utilise `/config_presence` d\'abord.', ephemeral: true });
+      return interaction.editReply({ content: '❌ Aucun rôle configuré. Utilise `/config_presence` d\'abord.' });
     }
-
-    await interaction.deferReply({ ephemeral: true });
 
     const channel = interaction.guild.channels.cache.get(channelId);
     if (!channel) {
