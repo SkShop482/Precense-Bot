@@ -61,7 +61,11 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('ping')
-    .setDescription('Ping les membres du rôle configuré qui n\'ont pas réagi au dernier appel de présence')
+    .setDescription('Ping les membres qui n\'ont pas réagi au dernier appel de présence')
+    .addStringOption(opt =>
+      opt.setName('message_id')
+        .setDescription('L\'ID du message de présence')
+        .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .toJSON(),
 ];
@@ -151,14 +155,11 @@ client.on('interactionCreate', async (interaction) => {
   else if (interaction.commandName === 'ping') {
     const serverConfig = config[guildId];
     const roleId = serverConfig?.roleId;
-    const lastMsgId = serverConfig?.lastPresenceMsgId;
+    const lastMsgId = interaction.options.getString('message_id');
     const lastChannelId = serverConfig?.lastPresenceChannelId ?? serverConfig?.channelId;
 
     if (!roleId) {
       return interaction.reply({ content: '❌ Aucun rôle configuré. Utilise `/config_presence` d\'abord.', ephemeral: true });
-    }
-    if (!lastMsgId) {
-      return interaction.reply({ content: '❌ Aucun appel de présence trouvé. Envoie d\'abord un `/presence`.', ephemeral: true });
     }
 
     await interaction.deferReply({ ephemeral: true });
@@ -172,7 +173,7 @@ client.on('interactionCreate', async (interaction) => {
     try {
       presenceMsg = await channel.messages.fetch(lastMsgId);
     } catch {
-      return interaction.editReply({ content: '❌ Message de présence introuvable (supprimé ?).' });
+      return interaction.editReply({ content: '❌ Message introuvable. Vérifie l\'ID.' });
     }
 
     // Récupérer tous les membres du rôle
