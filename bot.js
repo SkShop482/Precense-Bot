@@ -61,7 +61,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('ping')
-    .setDescription('Ping les membres qui n\'ont pas réagi au dernier appel de présence')
+    .setDescription('Ping les membres qui n\'ont pas réagi à un appel de présence')
     .addStringOption(opt =>
       opt.setName('message_id')
         .setDescription('L\'ID du message de présence')
@@ -145,18 +145,15 @@ client.on('interactionCreate', async (interaction) => {
       return interaction.reply({ content: '❌ Salon introuvable. Refais `/config_presence`.', ephemeral: true });
     }
 
-    const sentMsg = await sendPresenceMessage(targetChannel, message, date, heure, roleId);
-    config[guildId].lastPresenceMsgId = sentMsg.id;
-    config[guildId].lastPresenceChannelId = targetChannel.id;
-    saveConfig(config);
+    await sendPresenceMessage(targetChannel, message, date, heure, roleId);
     await interaction.reply({ content: `✅ Appel de présence envoyé dans ${targetChannel} !`, ephemeral: true });
   }
 
   else if (interaction.commandName === 'ping') {
+    const msgId = interaction.options.getString('message_id');
     const serverConfig = config[guildId];
     const roleId = serverConfig?.roleId;
-    const lastMsgId = interaction.options.getString('message_id');
-    const lastChannelId = serverConfig?.lastPresenceChannelId ?? serverConfig?.channelId;
+    const channelId = serverConfig?.channelId;
 
     if (!roleId) {
       return interaction.reply({ content: '❌ Aucun rôle configuré. Utilise `/config_presence` d\'abord.', ephemeral: true });
@@ -164,51 +161,42 @@ client.on('interactionCreate', async (interaction) => {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const channel = interaction.guild.channels.cache.get(lastChannelId);
+    const channel = interaction.guild.channels.cache.get(channelId);
     if (!channel) {
       return interaction.editReply({ content: '❌ Salon introuvable.' });
     }
 
     let presenceMsg;
     try {
-      presenceMsg = await channel.messages.fetch(lastMsgId);
+      presenceMsg = await channel.messages.fetch(msgId);
     } catch {
       return interaction.editReply({ content: '❌ Message introuvable. Vérifie l\'ID.' });
     }
 
-    // Récupérer tous les membres du rôle
+    await interaction.guild.members.fetch();
     const role = interaction.guild.roles.cache.get(roleId);
     if (!role) {
       return interaction.editReply({ content: '❌ Rôle introuvable.' });
     }
-    await interaction.guild.members.fetch();
-    const roleMembers = role.members;
-
-    // Récupérer les réactions ✅ et ⏳
-    const reactions = presenceMsg.reactions.cache;
-    const presentReaction = reactions.get('✅');
-    const retardReaction = reactions.get('⏳');
 
     const reactedUsers = new Set();
-    if (presentReaction) {
-      const users = await presentReaction.users.fetch();
-      users.forEach(u => reactedUsers.add(u.id));
-    }
-    if (retardReaction) {
-      const users = await retardReaction.users.fetch();
-      users.forEach(u => reactedUsers.add(u.id));
+    for (const emoji of ['✅', '⏳']) {
+      const reaction = presenceMsg.reactions.cache.get(emoji);
+      if (reaction) {
+        const users = await reaction.users.fetch();
+        users.forEach(u => reactedUsers.add(u.id));
+      }
     }
 
-    // Membres du rôle qui n'ont pas réagi
-    const absents = roleMembers.filter(m => !reactedUsers.has(m.id) && !m.user.bot);
+    const absents = role.members.filter(m => !reactedUsers.has(m.id) && !m.user.bot);
 
     if (absents.size === 0) {
-      return interaction.editReply({ content: '✅ Tout le monde a répondu à l\'appel de présence !' });
+      return interaction.editReply({ content: '✅ Tout le monde a répondu !' });
     }
 
     const mentions = absents.map(m => `<@${m.id}>`).join(' ');
-    await channel.send({ content: `⚠️ **Rappel de présence** — Les membres suivants n'ont pas encore répondu :\n${mentions}` });
-    await interaction.editReply({ content: `✅ ${absents.size} membre(s) relancé(s) dans ${channel}.` });
+    await channel.send({ content: `⚠️ **Rappel de présence** — Pas encore répondu :\n${mentions}` });
+    await interaction.editReply({ content: `✅ ${absents.size} membre(s) relancé(s).` });
   }
 });
 
@@ -227,10 +215,7 @@ client.on('messageCreate', async (message) => {
 
   const [msg, date, heure] = parts.map(p => p.trim());
   const roleId = serverConfig?.roleId ?? null;
-  const sentMsg = await sendPresenceMessage(message.channel, msg, date, heure, roleId);
-  serverConfig.lastPresenceMsgId = sentMsg.id;
-  serverConfig.lastPresenceChannelId = message.channel.id;
-  saveConfig(config);
+  await sendPresenceMessage(message.channel, msg, date, heure, roleId);
   await message.delete().catch(() => {});
 });
 
