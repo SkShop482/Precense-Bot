@@ -125,7 +125,7 @@ client.on('interactionCreate', async (interaction) => {
     saveConfig(config);
 
     const roleText = role ? ` · Rôle pingé : ${role}` : ' · Aucun rôle configuré';
-    await interaction.reply({ content: `✅ Salon configuré : ${salon}${roleText}`, ephemeral: true });
+    await interaction.reply({ content: `✅ Salon configuré : ${salon}${roleText}`, flags: 64 });
   }
 
   else if (interaction.commandName === 'presence') {
@@ -142,15 +142,15 @@ client.on('interactionCreate', async (interaction) => {
       : interaction.channel;
 
     if (!targetChannel) {
-      return interaction.reply({ content: '❌ Salon introuvable. Refais `/config_presence`.', ephemeral: true });
+      return interaction.reply({ content: '❌ Salon introuvable. Refais `/config_presence`.', flags: 64 });
     }
 
     await sendPresenceMessage(targetChannel, message, date, heure, roleId);
-    await interaction.reply({ content: `✅ Appel de présence envoyé dans ${targetChannel} !`, ephemeral: true });
+    await interaction.reply({ content: `✅ Appel de présence envoyé dans ${targetChannel} !`, flags: 64 });
   }
 
   else if (interaction.commandName === 'relance') {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: 64 });
 
     const msgId = interaction.options.getString('message_id');
     const serverConfig = config[guildId];
