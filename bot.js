@@ -23,6 +23,7 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
   ]
 });
 
@@ -61,10 +62,10 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('relance')
-    .setDescription('Ping les membres qui n\'ont pas réagi à un appel de présence')
+    .setDescription("Ping les membres qui n'ont pas réagi à un appel de présence")
     .addStringOption(opt =>
       opt.setName('message_id')
-        .setDescription('L\'ID du message de présence')
+        .setDescription("L'ID du message de présence")
         .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .toJSON(),
@@ -151,59 +152,65 @@ client.on('interactionCreate', async (interaction) => {
 
   else if (interaction.commandName === 'relance') {
     await interaction.deferReply({ flags: 64 });
+    console.log('[relance] start');
 
-    const msgId = interaction.options.getString('message_id');
-    const serverConfig = config[guildId];
-    const roleId = serverConfig?.roleId;
-    const channelId = serverConfig?.channelId;
-
-    if (!roleId) {
-      return interaction.editReply({ content: '❌ Aucun rôle configuré. Utilise `/config_presence` d\'abord.' });
-    }
-
-    const channel = interaction.guild.channels.cache.get(channelId);
-    if (!channel) {
-      return interaction.editReply({ content: '❌ Salon introuvable.' });
-    }
-
-    let presenceMsg;
     try {
-      presenceMsg = await channel.messages.fetch(msgId);
-    } catch {
-      return interaction.editReply({ content: '❌ Message introuvable. Vérifie l\'ID.' });
-    }
+      const msgId = interaction.options.getString('message_id');
+      const serverConfig = config[guildId];
+      const roleId = serverConfig?.roleId;
+      const channelId = serverConfig?.channelId;
+      console.log('[relance] roleId:', roleId, 'channelId:', channelId, 'msgId:', msgId);
 
-    const role = await interaction.guild.roles.fetch(roleId);
-    if (!role) {
-      return interaction.editReply({ content: '❌ Rôle introuvable.' });
-    }
-
-    let membersWithRole;
-    try {
-      const roleMembers = await interaction.guild.members.fetch({ force: false });
-      membersWithRole = roleMembers.filter(m => m.roles.cache.has(roleId) && !m.user.bot);
-    } catch {
-      membersWithRole = interaction.guild.members.cache.filter(m => m.roles.cache.has(roleId) && !m.user.bot);
-    }
-
-    const reactedUsers = new Set();
-    for (const emoji of ['✅', '⏳']) {
-      const reaction = presenceMsg.reactions.cache.get(emoji);
-      if (reaction) {
-        const users = await reaction.users.fetch();
-        users.forEach(u => reactedUsers.add(u.id));
+      if (!roleId) {
+        return interaction.editReply({ content: "❌ Aucun rôle configuré. Utilise `/config_presence` d'abord." });
       }
+
+      const channel = interaction.guild.channels.cache.get(channelId);
+      if (!channel) {
+        return interaction.editReply({ content: '❌ Salon introuvable.' });
+      }
+      console.log('[relance] channel found');
+
+      let presenceMsg;
+      try {
+        presenceMsg = await channel.messages.fetch(msgId);
+        console.log('[relance] message found');
+      } catch (e) {
+        console.log('[relance] message error:', e.message);
+        return interaction.editReply({ content: "❌ Message introuvable. Vérifie l'ID." });
+      }
+
+      // Récupérer les membres du rôle depuis le cache
+      const membersWithRole = interaction.guild.members.cache.filter(
+        m => m.roles.cache.has(roleId) && !m.user.bot
+      );
+      console.log('[relance] members with role (cache):', membersWithRole.size);
+
+      const reactedUsers = new Set();
+      for (const emoji of ['✅', '⏳']) {
+        const reaction = presenceMsg.reactions.cache.get(emoji);
+        if (reaction) {
+          const users = await reaction.users.fetch();
+          users.forEach(u => reactedUsers.add(u.id));
+        }
+      }
+      console.log('[relance] reacted users:', reactedUsers.size);
+
+      const absents = membersWithRole.filter(m => !reactedUsers.has(m.id));
+      console.log('[relance] absents:', absents.size);
+
+      if (absents.size === 0) {
+        return interaction.editReply({ content: '✅ Tout le monde a répondu !' });
+      }
+
+      const mentions = absents.map(m => `<@${m.id}>`).join(' ');
+      await channel.send({ content: `⚠️ **Rappel de présence** — Pas encore répondu :\n${mentions}` });
+      await interaction.editReply({ content: `✅ ${absents.size} membre(s) relancé(s).` });
+
+    } catch (e) {
+      console.error('[relance] erreur:', e);
+      await interaction.editReply({ content: `❌ Erreur : ${e.message}` });
     }
-
-    const absents = membersWithRole.filter(m => !reactedUsers.has(m.id));
-
-    if (absents.size === 0) {
-      return interaction.editReply({ content: '✅ Tout le monde a répondu !' });
-    }
-
-    const mentions = absents.map(m => `<@${m.id}>`).join(' ');
-    await channel.send({ content: `⚠️ **Rappel de présence** — Pas encore répondu :\n${mentions}` });
-    await interaction.editReply({ content: `✅ ${absents.size} membre(s) relancé(s).` });
   }
 });
 
