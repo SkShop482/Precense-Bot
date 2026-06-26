@@ -60,7 +60,7 @@ const commands = [
     .toJSON(),
 
   new SlashCommandBuilder()
-    .setName('ping')
+    .setName('relance')
     .setDescription('Ping les membres qui n\'ont pas réagi à un appel de présence')
     .addStringOption(opt =>
       opt.setName('message_id')
@@ -149,7 +149,7 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply({ content: `✅ Appel de présence envoyé dans ${targetChannel} !`, ephemeral: true });
   }
 
-  else if (interaction.commandName === 'ping') {
+  else if (interaction.commandName === 'relance') {
     await interaction.deferReply({ ephemeral: true });
 
     const msgId = interaction.options.getString('message_id');
