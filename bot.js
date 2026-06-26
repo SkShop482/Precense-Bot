@@ -105,6 +105,7 @@ client.once('ready', async () => {
   console.log(`🤖 Connecté en tant que ${client.user.tag}`);
   for (const [, guild] of client.guilds.cache) {
     await registerCommands(guild.id);
+    await guild.members.fetch().catch(e => console.log('members fetch error:', e.message));
   }
 });
 
